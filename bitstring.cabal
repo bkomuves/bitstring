@@ -36,7 +36,7 @@ Library
     Build-Depends:        QuickCheck == 2.*
     cpp-options:          -DWITH_QUICKCHECK
 
-  Build-Depends:       bytestring
+  Build-Depends:       bytestring >= 0.10 && < 0.13
   
   Exposed-Modules:     Data.BitString,
                        Data.BitString.BigEndian
