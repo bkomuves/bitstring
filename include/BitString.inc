@@ -539,7 +539,7 @@ newtype BoolList = BoolList [Bool] deriving Show
 newtype SearchFor = SearchFor BitString deriving Show
 
 instance Arbitrary Size where
-  arbitrary = Size <$> (fromIntegral :: Int -> Int64) <$> choose (0,64) -- 192)
+  arbitrary = Size <$> (fromIntegral :: Int -> Int64) <$> choose (0,64) -- 192
 
 instance Arbitrary BoolList where
   arbitrary = do
