@@ -33,6 +33,7 @@
     --
 #ifdef WITH_QUICKCHECK
   , runAllTest
+  , runAllTest'
   , BitChunk (..)
   , BitString ( MkBitString )
   , showBitChunk
@@ -68,6 +69,7 @@ import Control.Applicative hiding ( empty )
 import Data.Bits ()
 import Data.Int  ()
 import Data.Word ()
+import Data.Char (ord)
 import Data.Maybe
 import qualified Data.List as List
 
@@ -79,7 +81,6 @@ import qualified Data.ByteString.Lazy     as L
 #ifdef WITH_QUICKCHECK
 import Test.QuickCheck hiding ( (.&.) )
 import qualified Data.ByteString.Char8 as BC
-import Data.Char (ord)
 #endif
 
 import Foreign
