@@ -59,6 +59,7 @@
   
 --------------------------------------------------------------------------------
 
+import qualified Prelude
 import Prelude hiding (take,drop,last,length,splitAt,concat,null,rem,init,foldl')
 
 import Control.Monad
@@ -569,10 +570,14 @@ instance Arbitrary BitString where
     MkBitString <$> vector k 
 
 runAllTest :: IO ()     
-runAllTest = do
+runAllTest = runAllTest' 500
+
+runAllTest' :: Int -> IO ()     
+runAllTest' n = do
   let mytest (text,prop) = do
-        print text
-        quickCheck prop
+        putStr text
+        putStr (": " ++ replicate (20 - Prelude.length text) ' ')
+        quickCheckWith (stdArgs { maxSuccess = n }) prop
         
   mytest ("fromToList"   , prop_fromToList )
   mytest ("toFromList"   , prop_toFromList )
