@@ -6,10 +6,10 @@ module Main where
 import Data.Bits
 import Data.Word
 
-import qualified Data.ByteString.Lazy     as ByteL 
-import qualified Data.ByteString          as Byte  ; import Data.ByteString (ByteString) 
-import qualified Data.BitString           as Bit   ; import Data.BitString  (BitString) 
-import qualified Data.BitString.BigEndian as BE    
+import qualified Data.ByteString.Lazy     as ByteL
+import qualified Data.ByteString          as Byte  ; import Data.ByteString (ByteString)
+import qualified Data.BitString           as Bit   ; import Data.BitString  (BitString)
+import qualified Data.BitString.BigEndian as BE
 
 --------------------------------------------------------------------------------
 
@@ -57,6 +57,6 @@ reL = concatMap wordToBitsLE $ ByteL.unpack $ Bit.realizeBitStringLazy bs
 main = do
   putStrLn "hello, bitstring"
   print (bs == bs')
-  print (Bit.toList bs == Bit.toList bs')  
+  print (Bit.toList bs == Bit.toList bs')
   print (re == reL)
   print $ and $ zipWith (==) re (concat bits)
