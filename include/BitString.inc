@@ -7,6 +7,9 @@
   , bitStringLazy
   , unsafeBitString'
     --
+  , showBitString
+  , debugShowBitString
+    --
   , take
   , drop
   , splitAt
@@ -31,7 +34,9 @@
 #ifdef WITH_QUICKCHECK
   , runAllTest
   , BitChunk (..)
-  , BitString ( BitString )
+  , BitString ( MkBitString )
+  , showBitChunk
+  , debugShowBitChunk
   , mypack
   , prop_fromToList 
   , prop_toFromList 
@@ -122,47 +127,43 @@ byteReverseWord32 w
 
 --------------------------------------------------------------------------------
 
-data BitChunk = BitChunk
+data BitChunk = MkBitChunk
   { bitChunkOffset :: !Int64
   , bitChunkLength :: !Int64
   , bitChunkData   :: !ByteString
   }
 
-#ifdef WITH_QUICKCHECK
-
 mypack :: String -> ByteString
 mypack = B.pack . map c2w where
   c2w = fromIntegral . ord
 
+debugShowBitChunk :: BitChunk -> String
+debugShowBitChunk (MkBitChunk ofs len dat) = "BitChunk " ++ show ofs ++ " " ++ show len ++ " (mypack " ++ show dat ++ ")"
+
+showBitChunk :: BitChunk -> String
+showBitChunk chunk = "MkBitChunk <" ++ map f (bitChunkTo01List chunk) ++ ">" where 
+  f 0 = '0'
+  f 1 = '1'
+
 instance Show BitChunk where
-  show (BitChunk ofs len dat) = "BitChunk " ++ show ofs ++ " " ++ show len ++ " (mypack " ++ show dat ++ ")"
-
-#else  
-
-instance Show BitChunk where
-  show chunk = "BitChunk <" ++ map f (bitChunkTo01List chunk) ++ ">" where 
-    f 0 = '0'
-    f 1 = '1'
-
-#endif 
--- #define WITH_QUICKCHECK
+  show = showBitChunk
 
 emptyBitChunk :: BitChunk
-emptyBitChunk = BitChunk 0 0 B.empty
+emptyBitChunk = MkBitChunk 0 0 B.empty
 
 {-  
 bitChunk' :: Int64 -> ByteString -> BitChunk  
-bitChunk' ofs bs = BitString ofs (len-ofs) bs where 
+bitChunk' ofs bs = MkBitString ofs (len-ofs) bs where 
   len = 8 * fromIntegral (B.length bs)
 -}
 
 -- | warning! no boundary checks
 unsafeBitChunk'  
-  :: Int64      -- ^ offset 
-  -> Int64      -- ^ length
-  -> ByteString  -- ^ source
+  :: Int64        -- ^ offset 
+  -> Int64        -- ^ length
+  -> ByteString   -- ^ source
   -> BitChunk 
-unsafeBitChunk' ofs len dat = BitChunk ofs len dat where 
+unsafeBitChunk' ofs len dat = MkBitChunk ofs len dat where 
 
 bitChunk :: ByteString -> BitChunk  
 bitChunk bs = unsafeBitChunk' 0 (8 * fromIntegral (B.length bs)) bs
@@ -170,14 +171,14 @@ bitChunk bs = unsafeBitChunk' 0 (8 * fromIntegral (B.length bs)) bs
 --------------------------------------------------------------------------------
 
 bitChunkDrop :: Int64 -> BitChunk -> BitChunk
-bitChunkDrop k (BitChunk ofs len dat) = if k<len
-  then BitChunk (ofs+k) (len-k) dat
+bitChunkDrop k (MkBitChunk ofs len dat) = if k<len
+  then MkBitChunk (ofs+k) (len-k) dat
   else emptyBitChunk
 
 bitChunkTake :: Int64 -> BitChunk -> BitChunk
-bitChunkTake k bc@(BitChunk ofs len dat) 
+bitChunkTake k bc@(MkBitChunk ofs len dat) 
   | k==0      = emptyBitChunk
-  | k<=len    = BitChunk ofs k dat
+  | k<=len    = MkBitChunk ofs k dat
   | otherwise = bc
 
 -- TODO: better implementation    
@@ -202,7 +203,7 @@ unsafeLookupBitChunk :: BitChunk -> Int64 -> Bool
 unsafeLookupBitChunk chunk j = unsafeLookupBitChunk01 chunk j /= 0
 
 unsafeLookupBitChunk01 :: BitChunk -> Int64 -> Word8
-unsafeLookupBitChunk01 (BitChunk ofs len dat) j = bit where
+unsafeLookupBitChunk01 (MkBitChunk ofs len dat) j = bit where
   (n,k) = divMod (ofs+j) 8
   byte = B.index dat (fromIntegral n)
 #ifndef BITSTRING_BIGENDIAN
@@ -214,11 +215,11 @@ unsafeLookupBitChunk01 (BitChunk ofs len dat) j = bit where
 --------------------------------------------------------------------------------
   
 bitChunkToList :: BitChunk -> [Bool]
-bitChunkToList chunk@(BitChunk ofs len dat) = 
+bitChunkToList chunk@(MkBitChunk ofs len dat) = 
   [ unsafeLookupBitChunk chunk k | k<-[0..len-1] ]
 
 bitChunkFromList :: [Bool] -> BitChunk
-bitChunkFromList bits = BitChunk 0 (fromIntegral len) (B.pack bytes) where
+bitChunkFromList bits = MkBitChunk 0 (fromIntegral len) (B.pack bytes) where
   (len,bytes) = worker bits
   worker []   = ( 0, [] )
   worker bits = ( len' + List.length this , byte:ys ) where
@@ -231,11 +232,11 @@ bitChunkFromList bits = BitChunk 0 (fromIntegral len) (B.pack bytes) where
     (len' , ys) = worker rest
 
 bitChunkTo01List :: BitChunk -> [Word8]
-bitChunkTo01List chunk@(BitChunk ofs len dat) = 
+bitChunkTo01List chunk@(MkBitChunk ofs len dat) = 
   [ unsafeLookupBitChunk01 chunk k | k<-[0..len-1] ]
 
 bitChunkFrom01List :: [Word8] -> BitChunk
-bitChunkFrom01List bits = BitChunk 0 (fromIntegral len) (B.pack bytes) where
+bitChunkFrom01List bits = MkBitChunk 0 (fromIntegral len) (B.pack bytes) where
   (len,bytes) = worker bits
   worker []   = ( 0, [] )
   worker bits = ( len' + List.length this , byte:ys ) where
@@ -250,14 +251,18 @@ bitChunkFrom01List bits = BitChunk 0 (fromIntegral len) (B.pack bytes) where
 instance Eq BitChunk where
   -- | warning! very slow! TODO: make a better routine
 --  (==) :: BitChunk -> BitChunk -> Bool
-  (==) x y = bitChunkToList x == bitChunkToList y
+  (==) = bitChunkIsEqualNaive
     
+  -- | warning! very slow! TODO: make a better routine
+bitChunkIsEqualNaive ::  BitChunk -> BitChunk -> Bool
+bitChunkIsEqualNaive x y = bitChunkToList x == bitChunkToList y
+
 --------------------------------------------------------------------------------
 
 -- | Creates a new 'BitChunk' with offset field 0
 realignBitChunk :: BitChunk -> BitChunk 
-realignBitChunk (BitChunk ofs len dat) = 
-  BitChunk 0 len $ case ofsFrac of 
+realignBitChunk (MkBitChunk ofs len dat) = 
+  MkBitChunk 0 len $ case ofsFrac of 
     0 -> dat'
     _ -> B.pack $ B.zipWith f dat' (B.snoc (B.tail dat') 0) 
   where 
@@ -272,7 +277,7 @@ realignBitChunk (BitChunk ofs len dat) =
     
 realizeBitChunk :: BitChunk -> (ByteString, Maybe (Word8,Int))
 realizeBitChunk orig = (whole, end) where
-  chunk@(BitChunk 0 len dat) = realignBitChunk orig
+  chunk@(MkBitChunk 0 len dat) = realignBitChunk orig
   (n,k) = divMod len 8
   whole = B.take (fromIntegral n) dat
   end = case k of
@@ -292,30 +297,33 @@ realizeBitChunk orig = (whole, end) where
 --------------------------------------------------------------------------------
 
 unBitString :: BitString -> [BitChunk]
-unBitString (BitString xs) = xs
+unBitString (MkBitString xs) = xs
   
-newtype BitString = BitString [BitChunk] 
-#ifdef WITH_QUICKCHECK 
-  deriving Show
-#else
-instance Show BitString where
-  show bits = "BitString <" ++ map f (to01List bits) ++ ">" where 
-    f 0 = '0'
-    f 1 = '1'
-    f _ = error "BitString/show: impossible"
-#endif
+newtype BitString = MkBitString [BitChunk] 
+
+debugShowBitString :: BitString -> String
+debugShowBitString (MkBitString list) = "MkBitString " ++ show list
+
+showBitString :: BitString -> String
+showBitString bits = "MkBitString <" ++ map f (to01List bits) ++ ">" where 
+  f 0 = '0'
+  f 1 = '1'
+  f _ = error "BitString/show: impossible"
+
+instance Show BitString where 
+  show = showBitString
 
 empty :: BitString
-empty = BitString [] -- emptyChunk]
+empty = MkBitString [] 
 
 -- | Create a 'BitString' from a portion of a 'ByteString'.
 -- Warning! No boundary checks are performed!
 unsafeBitString' 
-  :: Int64      -- ^ offset 
-  -> Int64      -- ^ length
+  :: Int64       -- ^ offset 
+  -> Int64       -- ^ length
   -> ByteString  -- ^ source 
   -> BitString
-unsafeBitString' ofs len bs = BitString [unsafeBitChunk' ofs len bs] 
+unsafeBitString' ofs len bs = MkBitString [unsafeBitChunk' ofs len bs] 
 
 -- | Create a 'BitString' from a strict 'ByteString'
 bitString :: ByteString -> BitString  
@@ -326,18 +334,18 @@ bitStringLazy :: L.ByteString -> BitString
 bitStringLazy = concat . map bitString . L.toChunks 
 
 drop :: Int64 -> BitString -> BitString
-drop k (BitString cs) = BitString (worker k cs) where
+drop k (MkBitString cs) = MkBitString (worker k cs) where
   worker _ [] = []
-  worker k (BitChunk ofs len dat : cs) = if k < len 
-    then BitChunk (ofs+k) (len-k) dat : cs
+  worker k (MkBitChunk ofs len dat : cs) = if k < len 
+    then MkBitChunk (ofs+k) (len-k) dat : cs
     else worker (k-len) cs
 
 take :: Int64 -> BitString -> BitString
-take k (BitString cs) = BitString (worker k cs) where
+take k (MkBitString cs) = MkBitString (worker k cs) where
   worker 0 _  = []
   worker _ [] = []
-  worker k (c@(BitChunk ofs len dat) : cs) = if k <= len 
-    then [ BitChunk ofs k dat ]
+  worker k (c@(MkBitChunk ofs len dat) : cs) = if k <= len 
+    then [ MkBitChunk ofs k dat ]
     else c : worker (k-len) cs
 
 -- TODO: better implementation    
@@ -345,29 +353,29 @@ splitAt :: Int64 -> BitString -> (BitString,BitString)
 splitAt k b = (take k b, drop k b)
 
 append :: BitString -> BitString -> BitString    
-append (BitString chunks1) (BitString chunks2) = BitString (chunks1 ++ chunks2)
+append (MkBitString chunks1) (MkBitString chunks2) = MkBitString (chunks1 ++ chunks2)
 
 concat :: [BitString] -> BitString
 concat xs = case xs of
   [] -> empty
-  _  -> (BitString . List.concat . map unBitString) xs   -- hmm how strict or lazy this should be?
+  _  -> (MkBitString . List.concat . map unBitString) xs   -- hmm how strict or lazy this should be?
 
 toList :: BitString -> [Bool]
-toList (BitString chunks) = List.concatMap bitChunkToList chunks
+toList (MkBitString chunks) = List.concatMap bitChunkToList chunks
 
 fromList :: [Bool] -> BitString
-fromList digits = BitString [bitChunkFromList digits]
+fromList digits = MkBitString [bitChunkFromList digits]
 
 to01List :: BitString -> [Word8]
-to01List (BitString chunks) = List.concatMap bitChunkTo01List chunks
+to01List (MkBitString chunks) = List.concatMap bitChunkTo01List chunks
 
 from01List :: [Word8] -> BitString
-from01List digits = BitString [bitChunkFrom01List digits]
+from01List digits = MkBitString [bitChunkFrom01List digits]
 
 --------------------------------------------------------------------------------
 
 length :: BitString -> Int64
-length (BitString chunks) = List.foldl' (+) 0 (map bitChunkLength chunks)
+length (MkBitString chunks) = List.foldl' (+) 0 (map bitChunkLength chunks)
 
 null :: BitString -> Bool
 null bits = (length bits == 0)
@@ -482,7 +490,7 @@ findSubstring32 small large =
 --------------------------------------------------------------------------------
 
 realizeBitString' :: BitString -> [ByteString]   
-realizeBitString' (BitString chunks) = worker Nothing chunks where
+realizeBitString' (MkBitString chunks) = worker Nothing chunks where
   worker :: Maybe (Word8,Int) -> [BitChunk] -> [ByteString]
   worker rem (b:bs) = 
     case rem of 
@@ -558,7 +566,7 @@ instance Arbitrary SearchFor where
 instance Arbitrary BitString where
   arbitrary = do
     k <- choose (0,7)
-    BitString <$> vector k 
+    MkBitString <$> vector k 
 
 runAllTest :: IO ()     
 runAllTest = do
@@ -614,11 +622,11 @@ prop_realign :: BitChunk -> Bool
 prop_realign chunk = realignBitChunk chunk == chunk
 
 prop_realizeChunk :: BitChunk -> Bool
-prop_realizeChunk chunk = append (bitString whole) (BitString [end]) == BitString [chunk] where
+prop_realizeChunk chunk = append (bitString whole) (MkBitString [end]) == MkBitString [chunk] where
   (whole,remain) = realizeBitChunk chunk
   end = case remain of
     Nothing -> emptyBitChunk
-    Just (w,k) -> BitChunk 0 (fromIntegral k) (B.singleton w)
+    Just (w,k) -> MkBitChunk 0 (fromIntegral k) (B.singleton w)
 
 prop_realize :: BitString -> Bool
 prop_realize bits = let n = length bits in unsafeBitString' 0 n (realizeBitStringStrict bits) == bits
